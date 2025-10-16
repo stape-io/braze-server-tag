@@ -1,0 +1,5 @@
+homepage: 'https://stape.io/'
+documentation: 'https://github.com/stape-io/braze-server-tag'
+versions:
+  - sha: b39da32b3644b4c851440da586c74ac55375033c
+    changeNotes: Initial release.
