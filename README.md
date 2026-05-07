@@ -23,3 +23,6 @@ The **Braze Tag for Google Tag Manager Server-Side** allows you to send events, 
 ## Open Source
 
 The **Braze Tag for Google Tag Manager Server-Side** is developed and maintained by the [Stape Team](https://stape.io/) under the Apache 2.0 license.
+
+### GTM Gallery Status
+🟢 [Listed](https://tagmanager.google.com/gallery/#/owners/stape-io/templates/braze-server-tag)
