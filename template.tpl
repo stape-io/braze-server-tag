@@ -454,101 +454,6 @@ ___TEMPLATE_PARAMETERS___
         "defaultValue": "optional"
       }
     ]
-  },
-  {
-    "displayName": "Logs Settings",
-    "name": "logsGroup",
-    "groupStyle": "ZIPPY_CLOSED",
-    "type": "GROUP",
-    "subParams": [
-      {
-        "type": "RADIO",
-        "name": "logType",
-        "radioItems": [
-          {
-            "value": "no",
-            "displayValue": "Do not log"
-          },
-          {
-            "value": "debug",
-            "displayValue": "Log to console during debug and preview"
-          },
-          {
-            "value": "always",
-            "displayValue": "Always log to console"
-          }
-        ],
-        "simpleValueType": true,
-        "defaultValue": "debug"
-      }
-    ]
-  },
-  {
-    "displayName": "BigQuery Logs Settings",
-    "name": "bigQueryLogsGroup",
-    "groupStyle": "ZIPPY_CLOSED",
-    "type": "GROUP",
-    "subParams": [
-      {
-        "type": "RADIO",
-        "name": "bigQueryLogType",
-        "radioItems": [
-          {
-            "value": "no",
-            "displayValue": "Do not log to BigQuery"
-          },
-          {
-            "value": "always",
-            "displayValue": "Log to BigQuery"
-          }
-        ],
-        "simpleValueType": true,
-        "defaultValue": "no"
-      },
-      {
-        "type": "GROUP",
-        "name": "logsBigQueryConfigGroup",
-        "groupStyle": "NO_ZIPPY",
-        "subParams": [
-          {
-            "type": "TEXT",
-            "name": "logBigQueryProjectId",
-            "displayName": "BigQuery Project ID",
-            "simpleValueType": true,
-            "help": "Optional.  \u003cbr\u003e\u003cbr\u003e  If omitted, it will be retrieved from the environment variable \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e where the server container is running. If the server container is running on Google Cloud, \u003cI\u003eGOOGLE_CLOUD_PROJECT\u003c/i\u003e will already be set to the Google Cloud project\u0027s ID."
-          },
-          {
-            "type": "TEXT",
-            "name": "logBigQueryDatasetId",
-            "displayName": "BigQuery Dataset ID",
-            "simpleValueType": true,
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          },
-          {
-            "type": "TEXT",
-            "name": "logBigQueryTableId",
-            "displayName": "BigQuery Table ID",
-            "simpleValueType": true,
-            "valueValidators": [
-              {
-                "type": "NON_EMPTY"
-              }
-            ]
-          }
-        ],
-        "enablingConditions": [
-          {
-            "paramName": "bigQueryLogType",
-            "paramValue": "always",
-            "type": "EQUALS"
-          }
-        ]
-      }
-    ]
   }
 ]
 
@@ -559,7 +464,6 @@ const getAllEventData = require('getAllEventData');
 const JSON = require('JSON');
 const sendHttpRequest = require('sendHttpRequest');
 const getTimestampMillis = require('getTimestampMillis');
-const getContainerVersion = require('getContainerVersion');
 const logToConsole = require('logToConsole');
 const getRequestHeader = require('getRequestHeader');
 const makeString = require('makeString');
@@ -567,7 +471,6 @@ const makeInteger = require('makeInteger');
 const makeNumber = require('makeInteger');
 const Math = require('Math');
 const getType = require('getType');
-const BigQuery = require('BigQuery');
 
 /*==============================================================================
 ==============================================================================*/
@@ -606,7 +509,7 @@ function trackUser(eventData) {
         Name: 'Braze',
         Type: 'Message',
         EventName: data.eventType,
-        Message: 'Event was not sent.',
+        Message: '🛑 [ERROR] Event was not sent.',
         Reason:
           'One or more fields are missing: "external_id" or "user_alias" or "braze_id" or "email" or "phone".'
       });
@@ -744,28 +647,9 @@ function addUserData(eventData, mappedData) {
 
 function sendRequest(requestData) {
   const url = data.apiEndpoint + requestData.path;
-
-  log({
-    Name: 'Braze',
-    Type: 'Request',
-    EventName: requestData.path,
-    RequestMethod: requestData.method,
-    RequestUrl: url,
-    RequestBody: requestData.body
-  });
-
   return sendHttpRequest(
     url,
     (statusCode, headers, body) => {
-      log({
-        Name: 'Braze',
-        Type: 'Response',
-        EventName: requestData.path,
-        ResponseStatusCode: statusCode,
-        ResponseHeaders: headers,
-        ResponseBody: body
-      });
-
       let parsedBody = {};
       if (body) parsedBody = JSON.parse(body);
 
@@ -891,7 +775,7 @@ function convertTimestampToISO(timestamp) {
 
 function isValidValue(value) {
   const valueType = getType(value);
-  return valueType !== 'null' && valueType !== 'undefined' && value !== '';
+  return valueType !== 'null' && valueType !== 'undefined' && value !== '' && value === value;
 }
 
 function mergeObj(target, source) {
@@ -909,91 +793,8 @@ function isConsentGivenOrNotRequired(data, eventData) {
 }
 
 function log(rawDataToLog) {
-  const logDestinationsHandlers = {};
-  if (determinateIsLoggingEnabled()) logDestinationsHandlers.console = logConsole;
-  if (determinateIsLoggingEnabledForBigQuery()) logDestinationsHandlers.bigQuery = logToBigQuery;
-
   rawDataToLog.TraceId = getRequestHeader('trace-id');
-
-  const keyMappings = {
-    // No transformation for Console is needed.
-    bigQuery: {
-      Name: 'tag_name',
-      Type: 'type',
-      TraceId: 'trace_id',
-      EventName: 'event_name',
-      RequestMethod: 'request_method',
-      RequestUrl: 'request_url',
-      RequestBody: 'request_body',
-      ResponseStatusCode: 'response_status_code',
-      ResponseHeaders: 'response_headers',
-      ResponseBody: 'response_body'
-    }
-  };
-
-  for (const logDestination in logDestinationsHandlers) {
-    const handler = logDestinationsHandlers[logDestination];
-    if (!handler) continue;
-
-    const mapping = keyMappings[logDestination];
-    const dataToLog = mapping ? {} : rawDataToLog;
-
-    if (mapping) {
-      for (const key in rawDataToLog) {
-        const mappedKey = mapping[key] || key;
-        dataToLog[mappedKey] = rawDataToLog[key];
-      }
-    }
-
-    handler(dataToLog);
-  }
-}
-
-function logConsole(dataToLog) {
-  logToConsole(JSON.stringify(dataToLog));
-}
-
-function logToBigQuery(dataToLog) {
-  const connectionInfo = {
-    projectId: data.logBigQueryProjectId,
-    datasetId: data.logBigQueryDatasetId,
-    tableId: data.logBigQueryTableId
-  };
-
-  dataToLog.timestamp = getTimestampMillis();
-
-  ['request_body', 'response_headers', 'response_body'].forEach((p) => {
-    dataToLog[p] = JSON.stringify(dataToLog[p]);
-  });
-
-  BigQuery.insert(connectionInfo, [dataToLog], { ignoreUnknownValues: true });
-}
-
-function determinateIsLoggingEnabled() {
-  const containerVersion = getContainerVersion();
-  const isDebug = !!(
-    containerVersion &&
-    (containerVersion.debugMode || containerVersion.previewMode)
-  );
-
-  if (!data.logType) {
-    return isDebug;
-  }
-
-  if (data.logType === 'no') {
-    return false;
-  }
-
-  if (data.logType === 'debug') {
-    return isDebug;
-  }
-
-  return data.logType === 'always';
-}
-
-function determinateIsLoggingEnabledForBigQuery() {
-  if (data.bigQueryLogType === 'no') return false;
-  return data.bigQueryLogType === 'always';
+  logToConsole(JSON.stringify(rawDataToLog));
 }
 
 
@@ -1104,16 +905,6 @@ ___SERVER_PERMISSIONS___
   {
     "instance": {
       "key": {
-        "publicId": "read_container_data",
-        "versionId": "1"
-      },
-      "param": []
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
         "publicId": "read_event_data",
         "versionId": "1"
       },
@@ -1144,67 +935,6 @@ ___SERVER_PERMISSIONS___
           "value": {
             "type": 1,
             "string": "any"
-          }
-        }
-      ]
-    },
-    "clientAnnotations": {
-      "isEditedByUser": true
-    },
-    "isRequired": true
-  },
-  {
-    "instance": {
-      "key": {
-        "publicId": "access_bigquery",
-        "versionId": "1"
-      },
-      "param": [
-        {
-          "key": "allowedTables",
-          "value": {
-            "type": 2,
-            "listItem": [
-              {
-                "type": 3,
-                "mapKey": [
-                  {
-                    "type": 1,
-                    "string": "projectId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "datasetId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "tableId"
-                  },
-                  {
-                    "type": 1,
-                    "string": "operation"
-                  }
-                ],
-                "mapValue": [
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "*"
-                  },
-                  {
-                    "type": 1,
-                    "string": "write"
-                  }
-                ]
-              }
-            ]
           }
         }
       ]
@@ -1343,61 +1073,6 @@ scenarios:
 
     assertApi('gtmOnSuccess').wasNotCalled();
     assertApi('gtmOnFailure').wasCalled();
-- name: Should log to console, if the 'Always log to console' option is selected
-  code: "mockData.userIdentifiersList = userIdentifiersList;\nmockData.logType = 'always';\n\
-    \nconst expectedDebugMode = true;\nmock('getContainerVersion', () => {\n  return\
-    \ {\n    debugMode: expectedDebugMode\n  };\n}); \n\nmock('logToConsole', (logData)\
-    \ => {\n  const parsedLogData = JSON.parse(logData);\n  requiredConsoleKeys.forEach(p\
-    \ => assertThat(parsedLogData[p]).isDefined());\n});\n\nrunCode(mockData);\n\n\
-    assertApi('logToConsole').wasCalled();\n"
-- name: Should log to console, if the 'Log during debug and preview' option is selected
-    AND is on preview mode
-  code: |
-    mockData.userIdentifiersList = userIdentifiersList;
-    mockData.logType = 'debug';
-
-    const expectedDebugMode = true;
-    mock('getContainerVersion', () => {
-      return {
-        debugMode: expectedDebugMode
-      };
-    });
-
-    mock('logToConsole', (logData) => {
-      const parsedLogData = JSON.parse(logData);
-      requiredConsoleKeys.forEach(p => assertThat(parsedLogData[p]).isDefined());
-    });
-
-    runCode(mockData);
-
-    assertApi('logToConsole').wasCalled();
-- name: Should NOT log to console, if the 'Log during debug and preview' option is
-    selected AND is NOT on preview mode
-  code: "mockData.userIdentifiersList = userIdentifiersList;\nmockData.logType = 'debug';\n\
-    \nconst expectedDebugMode = false;\nmock('getContainerVersion', () => {\n  return\
-    \ {\n    debugMode: expectedDebugMode\n  };\n}); \n\nrunCode(mockData);\n\nassertApi('logToConsole').wasNotCalled();\n"
-- name: Should NOT log to console, if the 'Do not log' option is selected
-  code: |
-    mockData.userIdentifiersList = userIdentifiersList;
-    mockData.logType = 'no';
-
-    runCode(mockData);
-
-    assertApi('logToConsole').wasNotCalled();
-- name: Should log to BQ, if the 'Log to BigQuery' option is selected
-  code: "mockData.userIdentifiersList = userIdentifiersList;\nmockData.bigQueryLogType\
-    \ = 'always';\n\nmockObject('BigQuery', {\n  insert: (connectionInfo, rows, options)\
-    \ => { \n    assertThat(connectionInfo).isDefined();\n    assertThat(rows).isArray();\n\
-    \    assertThat(rows).hasLength(1);\n    requiredBqKeys.forEach(p => assertThat(rows[0][p]).isDefined());\n\
-    \    assertThat(options).isEqualTo(expectedBqOptions);\n    return Promise.create((resolve,\
-    \ reject) => {\n      resolve();\n    });\n  }\n});\n\nrunCode(mockData);\n\n\
-    assertApi('gtmOnSuccess').wasCalled();\nassertApi('gtmOnFailure').wasNotCalled();"
-- name: Should NOT log to BQ, if the 'Do not log to BigQuery' option is selected
-  code: "mockData.userIdentifiersList = userIdentifiersList;\nmockData.bigQueryLogType\
-    \ = 'no';\n\nmockObject('BigQuery', {\n  insert: (connectionInfo, rows, options)\
-    \ => { \n    fail('BigQuery.insert should not have been called.');\n    return\
-    \ Promise.create((resolve, reject) => {\n      resolve();\n    });\n  }\n});\n\
-    \nrunCode(mockData);\n\nassertApi('gtmOnSuccess').wasCalled();\nassertApi('gtmOnFailure').wasNotCalled();"
 setup: |-
   const JSON = require('JSON');
   const Promise = require('Promise');
@@ -1497,6 +1172,11 @@ setup: |-
 
 
 ___NOTES___
+
+
+2026-05-25 Change Notes:
+ - Logging removal.
+
 
 Created on 10/15/2025, 5:37:17 PM
 
