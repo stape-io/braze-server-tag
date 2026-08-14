@@ -1,17 +1,31 @@
+const computeEffectiveTldPlusOne = require('computeEffectiveTldPlusOne');
+const generateRandom = require('generateRandom');
 const getAllEventData = require('getAllEventData');
-const JSON = require('JSON');
-const sendHttpRequest = require('sendHttpRequest');
-const getTimestampMillis = require('getTimestampMillis');
-const logToConsole = require('logToConsole');
+const getEventData = require('getEventData');
+const getCookieValues = require('getCookieValues');
 const getRequestHeader = require('getRequestHeader');
-const makeString = require('makeString');
-const makeInteger = require('makeInteger');
-const makeNumber = require('makeInteger');
-const Math = require('Math');
+const getTimestampMillis = require('getTimestampMillis');
 const getType = require('getType');
+const JSON = require('JSON');
+const logToConsole = require('logToConsole');
+const makeInteger = require('makeInteger');
+const makeNumber = require('makeNumber');
+const makeString = require('makeString');
+const Math = require('Math');
+const Object = require('Object');
+const sendHttpRequest = require('sendHttpRequest');
+const setCookie = require('setCookie');
 
 /*==============================================================================
 ==============================================================================*/
+
+// Braze's own '/users/identify' endpoint only merges alias-only, email-only, or phone-only
+// profiles into an 'external_id' profile ('braze_id' is not a valid input there). So the
+// anonymous, cookie-backed identifier is sent as a 'user_alias' instead of 'braze_id': that keeps
+// the door open to reconcile anonymous history once the user becomes identified. It's intentionally
+// called "Anonymous Alias" (not "Braze ID") to avoid confusion with the real braze_id/device_id set
+// by the client SDK.
+const ANONYMOUS_ALIAS_LABEL = 'anonymous_alias_cookie';
 
 const eventData = getAllEventData();
 
@@ -24,7 +38,11 @@ if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
   return data.gtmOnSuccess();
 }
 
-trackUser(eventData);
+if (data.action === 'identifyUser') {
+  identifyUser(eventData);
+} else {
+  trackUser(eventData);
+}
 
 if (data.useOptimisticScenario) {
   return data.gtmOnSuccess();
@@ -166,6 +184,10 @@ function addUserData(eventData, mappedData) {
     data.userIdentifiersList.forEach((d) => (userIdentifiers[d.name] = d.value));
   }
 
+  addAnonymousIdentity(userIdentifiers, eventData);
+
+  applyPrimaryIdentifierPrecedence(userIdentifiers);
+
   // It's required to have user data in other entities ('purchases' or 'events') in top level.
   ['events', 'purchases'].forEach((key) => {
     const entity = mappedData[key];
@@ -181,6 +203,108 @@ function addUserData(eventData, mappedData) {
   mappedData.attributes = [mergeObj(userAttributes, userIdentifiers)];
 
   return mappedData;
+}
+
+// When no primary identifier ('external_id', 'braze_id' or 'user_alias') is already set, falls
+// back to a cookie-backed anonymous 'user_alias' so the request always has an identifier. Merging
+// that anonymous alias into an 'external_id' profile once the user is known is a separate, explicit
+// "Identify User" action (see identifyUser()) rather than an automatic side effect of Track Event.
+function addAnonymousIdentity(userIdentifiers, eventData) {
+  if (
+    isValidValue(userIdentifiers.external_id) ||
+    isValidValue(userIdentifiers.braze_id) ||
+    isValidValue(userIdentifiers.user_alias)
+  ) {
+    return;
+  }
+
+  const aliasName = getAnonymousAliasName(eventData, true);
+  if (!aliasName) return;
+
+  userIdentifiers.user_alias = { alias_label: ANONYMOUS_ALIAS_LABEL, alias_name: aliasName };
+  userIdentifiers['_update_existing_only'] = false;
+  storeAnonymousAliasCookie(aliasName);
+}
+
+function getAnonymousAliasName(eventData, allowGenerate) {
+  const aliasName = getCookieValues('__braze_anon_alias')[0] || eventData.braze_id;
+
+  if (aliasName) return aliasName;
+
+  if (allowGenerate && data.setAnonymousAliasCookie) return generateUUID();
+}
+
+function storeAnonymousAliasCookie(aliasName) {
+  if (!data.setAnonymousAliasCookie) return;
+
+  setCookie(
+    '__braze_anon_alias',
+    aliasName,
+    {
+      domain: getCookieDomain(data.cookieDomain),
+      samesite: data.cookieSameSite || 'None',
+      path: '/',
+      secure: true,
+      httpOnly: !!data.cookieHttpOnly,
+      'max-age': 60 * 60 * 24 * makeInteger(data.cookieExpiration || 365)
+    },
+    false
+  );
+}
+
+// Explicit "Identify User" action: merges an existing anonymous alias profile into an
+// 'external_id' profile via '/users/identify'. Never generates a new alias -- if there's no
+// existing anonymous alias to merge, there's nothing for this action to do.
+function identifyUser(eventData) {
+  const userIdentifiers = {};
+  if (data.userIdentifiersList) {
+    data.userIdentifiersList.forEach((d) => (userIdentifiers[d.name] = d.value));
+  }
+
+  const externalId = userIdentifiers.external_id;
+  const aliasName = getAnonymousAliasName(eventData, false);
+
+  if (!isValidValue(externalId) || !aliasName) {
+    log({
+      Name: 'Braze',
+      Type: 'Message',
+      Message: '🛑 [ERROR] Identify User was not sent.',
+      Reason:
+        'Requires both an "external_id" (User Identifiers) and an existing anonymous alias (cookie or Event Data) to merge.'
+    });
+
+    return data.gtmOnFailure();
+  }
+
+  storeAnonymousAliasCookie(aliasName);
+
+  return sendRequest({
+    path: '/users/identify',
+    body: {
+      aliases_to_identify: [
+        {
+          external_id: externalId,
+          user_alias: {
+            alias_label: ANONYMOUS_ALIAS_LABEL,
+            alias_name: aliasName
+          }
+        }
+      ]
+    },
+    method: 'POST'
+  });
+}
+
+// Braze allows only one primary identifier per request. Ref: https://braze.com/docs/api/endpoints/user_data/post_user_track/#identifier-resolution
+function applyPrimaryIdentifierPrecedence(userIdentifiers) {
+  if (isValidValue(userIdentifiers.external_id)) {
+    Object.delete(userIdentifiers, 'braze_id');
+    Object.delete(userIdentifiers, 'user_alias');
+    Object.delete(userIdentifiers, '_update_existing_only');
+  } else if (isValidValue(userIdentifiers.braze_id)) {
+    Object.delete(userIdentifiers, 'user_alias');
+    Object.delete(userIdentifiers, '_update_existing_only');
+  }
 }
 
 function sendRequest(requestData) {
@@ -240,6 +364,26 @@ function areThereMissingRequiredIdentifiers(obj) {
 /*==============================================================================
   Helpers
 ==============================================================================*/
+
+function random() {
+  return generateRandom(1000000000000000, 10000000000000000) / 10000000000000000;
+}
+
+function generateUUID() {
+  function s(n) {
+    return h((random() * (1 << (n << 2))) ^ getTimestampMillis()).slice(-n);
+  }
+  function h(n) {
+    return (n | 0).toString(16);
+  }
+  return [
+    s(4) + s(4),
+    s(4),
+    '4' + s(3),
+    h(8 | (random() * 4)) + s(3),
+    getTimestampMillis().toString(16).slice(-10) + s(2)
+  ].join('-');
+}
 
 function convertTimestampToISO(timestamp) {
   const leapYear = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -321,6 +465,13 @@ function mergeObj(target, source) {
     if (source.hasOwnProperty(key)) target[key] = source[key];
   }
   return target;
+}
+
+function getCookieDomain(defaultCookieDomain) {
+  return !defaultCookieDomain || defaultCookieDomain === 'auto'
+    ? computeEffectiveTldPlusOne(getEventData('page_location') || getRequestHeader('referer')) ||
+        'auto'
+    : defaultCookieDomain;
 }
 
 function isConsentGivenOrNotRequired(data, eventData) {

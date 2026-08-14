@@ -35,9 +35,40 @@ ___TEMPLATE_PARAMETERS___
 
 [
   {
+    "type": "SELECT",
+    "name": "action",
+    "displayName": "Action",
+    "selectItems": [
+      {
+        "value": "trackEvent",
+        "displayValue": "Track Event"
+      },
+      {
+        "value": "identifyUser",
+        "displayValue": "Identify User"
+      }
+    ],
+    "simpleValueType": true,
+    "defaultValue": "trackEvent",
+    "alwaysInSummary": true,
+    "help": "\u003cb\u003eTrack Event\u003c/b\u003e sends event/purchase/user data to Braze\u0027s \u003ci\u003e/users/track\u003c/i\u003e endpoint.\n\u003cbr/\u003e\u003cbr/\u003e\n\u003cb\u003eIdentify User\u003c/b\u003e merges an existing anonymous alias (see \u003ci\u003eSet Anonymous Alias cookie\u003c/i\u003e below) into an \u003ci\u003eexternal_id\u003c/i\u003e profile via \u003ci\u003e/users/identify\u003c/i\u003e. Use this on a dedicated trigger that fires once the user becomes known (e.g. on login/sign-up), instead of on every tracked event, to avoid redundant merge calls."
+  },
+  {
     "type": "RADIO",
     "name": "eventType",
     "displayName": "Event Name Setup Method",
+    "enablingConditions": [
+      {
+        "paramName": "action",
+        "paramValue": "trackEvent",
+        "type": "EQUALS"
+      },
+      {
+        "paramName": "action",
+        "paramValue": "",
+        "type": "NOT_PRESENT"
+      }
+    ],
     "radioItems": [
       {
         "value": "purchase",
@@ -97,7 +128,7 @@ ___TEMPLATE_PARAMETERS___
       }
     ],
     "alwaysInSummary": true,
-    "help": "You must use an API Key with the \"\u003ci\u003eusers.track\u003c/i\u003e\" permission. \u003ca href\u003d\"https://www.braze.com/docs/api/basics/#creating-rest-api-keys\"\u003eLearn more\u003c/a\u003e."
+    "help": "You must use an API Key with the \"\u003ci\u003eusers.track\u003c/i\u003e\" permission, and the \"\u003ci\u003eusers.identify\u003c/i\u003e\" permission if \u003ci\u003eSet Anonymous Alias cookie\u003c/i\u003e is enabled below. \u003ca href\u003d\"https://www.braze.com/docs/api/basics/#creating-rest-api-keys\"\u003eLearn more\u003c/a\u003e."
   },
   {
     "type": "TEXT",
@@ -118,6 +149,18 @@ ___TEMPLATE_PARAMETERS___
     "name": "eventDataListGroup",
     "groupStyle": "ZIPPY_CLOSED",
     "type": "GROUP",
+    "enablingConditions": [
+      {
+        "paramName": "action",
+        "paramValue": "trackEvent",
+        "type": "EQUALS"
+      },
+      {
+        "paramName": "action",
+        "paramValue": "",
+        "type": "NOT_PRESENT"
+      }
+    ],
     "subParams": [
       {
         "type": "TEXT",
@@ -306,6 +349,93 @@ ___TEMPLATE_PARAMETERS___
       },
       {
         "type": "CHECKBOX",
+        "name": "setAnonymousAliasCookie",
+        "checkboxText": "Set Anonymous Alias cookie",
+        "simpleValueType": true,
+        "defaultValue": true,
+        "help": "If \u003cb\u003efalse\u003c/b\u003e, and if an existing anonymous alias is found on the sources below, it will still be sent in the request but not stored as a cookie.\n\u003cbr/\u003e\u003cbr/\u003e\nIf \u003cb\u003etrue\u003c/b\u003e, the anonymous alias will be sent in the request as a \u003ci\u003euser_alias\u003c/i\u003e and stored as the \u003ci\u003e__braze_anon_alias\u003c/i\u003e cookie by server GTM. If none is found, a new one is generated (\u003ci\u003eTrack Event\u003c/i\u003e action only — \u003ci\u003eIdentify User\u003c/i\u003e never generates a new alias).\n\u003cbr/\u003e\u003cbr/\u003e\nA manually set \u003ci\u003ebraze_id\u003c/i\u003e or \u003ci\u003euser_alias\u003c/i\u003e (via the fields above) always takes precedence over this automatic anonymous alias. Only one primary identifier is sent per request: if \u003ci\u003eexternal_id\u003c/i\u003e is present, \u003ci\u003ebraze_id\u003c/i\u003e and \u003ci\u003euser_alias\u003c/i\u003e are dropped from that request; otherwise, if \u003ci\u003ebraze_id\u003c/i\u003e is present, \u003ci\u003euser_alias\u003c/i\u003e is dropped.\n\u003cbr/\u003e\u003cbr/\u003e\nThe anonymous alias is, in this order, sourced from:\n\u003cul\u003e\u003cli\u003e\u003ci\u003e__braze_anon_alias\u003c/i\u003e cookie\u003c/li\u003e\u003cli\u003e\u003ci\u003ebraze_id\u003c/i\u003e Event Data parameter\u003c/li\u003e\u003c/ul\u003e\n\u003cbr/\u003e\n\u003cb\u003eNote:\u003c/b\u003e this is not the Braze SDK\u0027s \u003ci\u003ebraze_id\u003c/i\u003e/device ID. It is a separate, server-generated \u003ci\u003euser_alias\u003c/i\u003e (label: \u003ci\u003eanonymous_alias_cookie\u003c/i\u003e) used only to keep track of anonymous users until they are identified.\n\u003cbr/\u003e\u003cbr/\u003e\n\u003cb\u003eMerging with an identified user:\u003c/b\u003e Braze\u0027s \u003ci\u003e/users/identify\u003c/i\u003e endpoint only merges alias-only, email-only, or phone-only profiles into an identified user (it does not accept \u003ci\u003ebraze_id\u003c/i\u003e). Because of this, the anonymous alias is sent as a \u003ci\u003euser_alias\u003c/i\u003e, not as \u003ci\u003ebraze_id\u003c/i\u003e. Merging is \u003cb\u003enot automatic\u003c/b\u003e: set the top-level \u003ci\u003eAction\u003c/i\u003e field to \u003ci\u003eIdentify User\u003c/i\u003e on a dedicated tag/trigger (e.g. fired once on login) to call \u003ci\u003e/users/identify\u003c/i\u003e and merge this anonymous alias into the \u003ci\u003eexternal_id\u003c/i\u003e profile.",
+        "subParams": [
+          {
+            "type": "GROUP",
+            "name": "anonymousAliasCookieSettingsGroup",
+            "displayName": "Anonymous Alias Cookie Settings",
+            "groupStyle": "ZIPPY_CLOSED",
+            "subParams": [
+              {
+                "type": "TEXT",
+                "name": "cookieDomain",
+                "displayName": "Cookie Domain",
+                "simpleValueType": true,
+                "valueHint": "example.com",
+                "help": "Enter your website\u0027s top-level domain as a fixed value (e.g., example.com).\n\u003cbr\u003e\nIf left empty or using the \"auto\" value, the domain is left up to the browser to determine.",
+                "defaultValue": "auto",
+                "valueValidators": [
+                  {
+                    "type": "NON_EMPTY"
+                  }
+                ]
+              },
+              {
+                "type": "SELECT",
+                "name": "cookieSameSite",
+                "displayName": "Cookie SameSite",
+                "macrosInSelect": false,
+                "selectItems": [
+                  {
+                    "value": "none",
+                    "displayValue": "None"
+                  },
+                  {
+                    "value": "lax",
+                    "displayValue": "Lax"
+                  },
+                  {
+                    "value": "strict",
+                    "displayValue": "Strict"
+                  }
+                ],
+                "simpleValueType": true,
+                "help": "\u003ca href\u003d\"https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#samesitesamesite-value\"\u003eLearn more\u003c/a\u003e.",
+                "defaultValue": "none"
+              },
+              {
+                "type": "SELECT",
+                "name": "cookieHttpOnly",
+                "displayName": "Cookie HTTP Only Flag",
+                "macrosInSelect": false,
+                "selectItems": [
+                  {
+                    "value": false,
+                    "displayValue": "false"
+                  },
+                  {
+                    "value": true,
+                    "displayValue": "true"
+                  }
+                ],
+                "simpleValueType": true,
+                "help": "\u003ca href\u003d\"https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Set-Cookie#samesitesamesite-value\"\u003eLearn more\u003c/a\u003e.",
+                "defaultValue": false
+              },
+              {
+                "type": "TEXT",
+                "name": "cookieExpiration",
+                "displayName": "Anonymous Alias Cookie Expiration",
+                "simpleValueType": true,
+                "valueUnit": "days",
+                "defaultValue": 365,
+                "valueValidators": [
+                  {
+                    "type": "NON_EMPTY"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "CHECKBOX",
         "name": "addUserAlias",
         "checkboxText": "Add User Alias",
         "simpleValueType": true,
@@ -460,20 +590,34 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_SERVER___
 
+const computeEffectiveTldPlusOne = require('computeEffectiveTldPlusOne');
+const generateRandom = require('generateRandom');
 const getAllEventData = require('getAllEventData');
-const JSON = require('JSON');
-const sendHttpRequest = require('sendHttpRequest');
-const getTimestampMillis = require('getTimestampMillis');
-const logToConsole = require('logToConsole');
+const getEventData = require('getEventData');
+const getCookieValues = require('getCookieValues');
 const getRequestHeader = require('getRequestHeader');
-const makeString = require('makeString');
-const makeInteger = require('makeInteger');
-const makeNumber = require('makeInteger');
-const Math = require('Math');
+const getTimestampMillis = require('getTimestampMillis');
 const getType = require('getType');
+const JSON = require('JSON');
+const logToConsole = require('logToConsole');
+const makeInteger = require('makeInteger');
+const makeNumber = require('makeNumber');
+const makeString = require('makeString');
+const Math = require('Math');
+const Object = require('Object');
+const sendHttpRequest = require('sendHttpRequest');
+const setCookie = require('setCookie');
 
 /*==============================================================================
 ==============================================================================*/
+
+// Braze's own '/users/identify' endpoint only merges alias-only, email-only, or phone-only
+// profiles into an 'external_id' profile ('braze_id' is not a valid input there). So the
+// anonymous, cookie-backed identifier is sent as a 'user_alias' instead of 'braze_id': that keeps
+// the door open to reconcile anonymous history once the user becomes identified. It's intentionally
+// called "Anonymous Alias" (not "Braze ID") to avoid confusion with the real braze_id/device_id set
+// by the client SDK.
+const ANONYMOUS_ALIAS_LABEL = 'anonymous_alias_cookie';
 
 const eventData = getAllEventData();
 
@@ -486,7 +630,11 @@ if (url && url.lastIndexOf('https://gtm-msr.appspot.com/', 0) === 0) {
   return data.gtmOnSuccess();
 }
 
-trackUser(eventData);
+if (data.action === 'identifyUser') {
+  identifyUser(eventData);
+} else {
+  trackUser(eventData);
+}
 
 if (data.useOptimisticScenario) {
   return data.gtmOnSuccess();
@@ -628,6 +776,10 @@ function addUserData(eventData, mappedData) {
     data.userIdentifiersList.forEach((d) => (userIdentifiers[d.name] = d.value));
   }
 
+  addAnonymousIdentity(userIdentifiers, eventData);
+
+  applyPrimaryIdentifierPrecedence(userIdentifiers);
+
   // It's required to have user data in other entities ('purchases' or 'events') in top level.
   ['events', 'purchases'].forEach((key) => {
     const entity = mappedData[key];
@@ -643,6 +795,108 @@ function addUserData(eventData, mappedData) {
   mappedData.attributes = [mergeObj(userAttributes, userIdentifiers)];
 
   return mappedData;
+}
+
+// When no primary identifier ('external_id', 'braze_id' or 'user_alias') is already set, falls
+// back to a cookie-backed anonymous 'user_alias' so the request always has an identifier. Merging
+// that anonymous alias into an 'external_id' profile once the user is known is a separate, explicit
+// "Identify User" action (see identifyUser()) rather than an automatic side effect of Track Event.
+function addAnonymousIdentity(userIdentifiers, eventData) {
+  if (
+    isValidValue(userIdentifiers.external_id) ||
+    isValidValue(userIdentifiers.braze_id) ||
+    isValidValue(userIdentifiers.user_alias)
+  ) {
+    return;
+  }
+
+  const aliasName = getAnonymousAliasName(eventData, true);
+  if (!aliasName) return;
+
+  userIdentifiers.user_alias = { alias_label: ANONYMOUS_ALIAS_LABEL, alias_name: aliasName };
+  userIdentifiers['_update_existing_only'] = false;
+  storeAnonymousAliasCookie(aliasName);
+}
+
+function getAnonymousAliasName(eventData, allowGenerate) {
+  const aliasName = getCookieValues('__braze_anon_alias')[0] || eventData.braze_id;
+
+  if (aliasName) return aliasName;
+
+  if (allowGenerate && data.setAnonymousAliasCookie) return generateUUID();
+}
+
+function storeAnonymousAliasCookie(aliasName) {
+  if (!data.setAnonymousAliasCookie) return;
+
+  setCookie(
+    '__braze_anon_alias',
+    aliasName,
+    {
+      domain: getCookieDomain(data.cookieDomain),
+      samesite: data.cookieSameSite || 'None',
+      path: '/',
+      secure: true,
+      httpOnly: !!data.cookieHttpOnly,
+      'max-age': 60 * 60 * 24 * makeInteger(data.cookieExpiration || 365)
+    },
+    false
+  );
+}
+
+// Explicit "Identify User" action: merges an existing anonymous alias profile into an
+// 'external_id' profile via '/users/identify'. Never generates a new alias -- if there's no
+// existing anonymous alias to merge, there's nothing for this action to do.
+function identifyUser(eventData) {
+  const userIdentifiers = {};
+  if (data.userIdentifiersList) {
+    data.userIdentifiersList.forEach((d) => (userIdentifiers[d.name] = d.value));
+  }
+
+  const externalId = userIdentifiers.external_id;
+  const aliasName = getAnonymousAliasName(eventData, false);
+
+  if (!isValidValue(externalId) || !aliasName) {
+    log({
+      Name: 'Braze',
+      Type: 'Message',
+      Message: '🛑 [ERROR] Identify User was not sent.',
+      Reason:
+        'Requires both an "external_id" (User Identifiers) and an existing anonymous alias (cookie or Event Data) to merge.'
+    });
+
+    return data.gtmOnFailure();
+  }
+
+  storeAnonymousAliasCookie(aliasName);
+
+  return sendRequest({
+    path: '/users/identify',
+    body: {
+      aliases_to_identify: [
+        {
+          external_id: externalId,
+          user_alias: {
+            alias_label: ANONYMOUS_ALIAS_LABEL,
+            alias_name: aliasName
+          }
+        }
+      ]
+    },
+    method: 'POST'
+  });
+}
+
+// Braze allows only one primary identifier per request. Ref: https://braze.com/docs/api/endpoints/user_data/post_user_track/#identifier-resolution
+function applyPrimaryIdentifierPrecedence(userIdentifiers) {
+  if (isValidValue(userIdentifiers.external_id)) {
+    Object.delete(userIdentifiers, 'braze_id');
+    Object.delete(userIdentifiers, 'user_alias');
+    Object.delete(userIdentifiers, '_update_existing_only');
+  } else if (isValidValue(userIdentifiers.braze_id)) {
+    Object.delete(userIdentifiers, 'user_alias');
+    Object.delete(userIdentifiers, '_update_existing_only');
+  }
 }
 
 function sendRequest(requestData) {
@@ -702,6 +956,26 @@ function areThereMissingRequiredIdentifiers(obj) {
 /*==============================================================================
   Helpers
 ==============================================================================*/
+
+function random() {
+  return generateRandom(1000000000000000, 10000000000000000) / 10000000000000000;
+}
+
+function generateUUID() {
+  function s(n) {
+    return h((random() * (1 << (n << 2))) ^ getTimestampMillis()).slice(-n);
+  }
+  function h(n) {
+    return (n | 0).toString(16);
+  }
+  return [
+    s(4) + s(4),
+    s(4),
+    '4' + s(3),
+    h(8 | (random() * 4)) + s(3),
+    getTimestampMillis().toString(16).slice(-10) + s(2)
+  ].join('-');
+}
 
 function convertTimestampToISO(timestamp) {
   const leapYear = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -783,6 +1057,13 @@ function mergeObj(target, source) {
     if (source.hasOwnProperty(key)) target[key] = source[key];
   }
   return target;
+}
+
+function getCookieDomain(defaultCookieDomain) {
+  return !defaultCookieDomain || defaultCookieDomain === 'auto'
+    ? computeEffectiveTldPlusOne(getEventData('page_location') || getRequestHeader('referer')) ||
+        'auto'
+    : defaultCookieDomain;
 }
 
 function isConsentGivenOrNotRequired(data, eventData) {
@@ -943,6 +1224,108 @@ ___SERVER_PERMISSIONS___
       "isEditedByUser": true
     },
     "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "get_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "cookieAccess",
+          "value": {
+            "type": 1,
+            "string": "specific"
+          }
+        },
+        {
+          "key": "cookieNames",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 1,
+                "string": "__braze_anon_alias"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
+  },
+  {
+    "instance": {
+      "key": {
+        "publicId": "set_cookies",
+        "versionId": "1"
+      },
+      "param": [
+        {
+          "key": "allowedCookies",
+          "value": {
+            "type": 2,
+            "listItem": [
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "name"
+                  },
+                  {
+                    "type": 1,
+                    "string": "domain"
+                  },
+                  {
+                    "type": 1,
+                    "string": "path"
+                  },
+                  {
+                    "type": 1,
+                    "string": "secure"
+                  },
+                  {
+                    "type": 1,
+                    "string": "session"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "__braze_anon_alias"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "*"
+                  },
+                  {
+                    "type": 1,
+                    "string": "any"
+                  },
+                  {
+                    "type": 1,
+                    "string": "any"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "clientAnnotations": {
+      "isEditedByUser": true
+    },
+    "isRequired": true
   }
 ]
 
@@ -962,32 +1345,72 @@ scenarios:
     assertApi('gtmOnFailure').wasCalled();
     assertApi('gtmOnSuccess').wasNotCalled();
 - name: Custom Event request is sent successfully - gtmOnSuccess
-  code: "mockData.eventType = 'custom';\nmockData.eventName = expectedValue;\nmockData.includeCommonEventData\
-    \ = true;\nmockData.eventCustomDataList = eventCustomDataList;\nmockData.userIdentifiersList\
-    \ = userIdentifiersList;\nmockData.addUserAlias = true;\nmockData.updateExistingUsersOnly\
-    \ = true;\nmockData.userAliasLabel = userAlias.label;\nmockData.userAliasName\
-    \ = userAlias.name;\nmockData.userCustomDataList = userCustomDataList;\n\nconst\
-    \ expectedRequestBody = {\n  attributes: [{\n    email: expectedValue,\n    phone:\
-    \ expectedValue,\n    external_id: expectedValue,\n    braze_id: expectedValue,\n\
-    \    user_alias: {\n      alias_label: expectedValue,\n      alias_name: expectedValue\n\
-    \    },\n    '_update_existing_only': mockData.updateExistingUsersOnly,\n    \n\
-    \    foo: expectedValue,\n    bar: expectedValue\n  }],\n  events: [{\n    app_id:\
-    \ expectedValue,\n    \n    email: expectedValue,\n    phone: expectedValue,\n\
-    \    external_id: expectedValue,\n    braze_id: expectedValue,\n    user_alias:\
-    \ {\n      alias_label: expectedValue,\n      alias_name: expectedValue\n    },\n\
-    \    '_update_existing_only': mockData.updateExistingUsersOnly,\n    \n    time:\
-    \ expectedTimestamp,\n    \n    properties: {\n      page_location: expectedValue,\n\
-    \      page_title: expectedValue,\n      page_referrer: expectedValue,\n     \
-    \ page_hostname: expectedValue,\n      page_encoding: expectedValue,\n      screen_resolution:\
-    \ expectedValue,\n      user_agent: expectedValue,\n      language: expectedValue,\n\
-    \      \n      foo: expectedValue,\n      bar: expectedValue\n    }\n  }]\n};\n\
-    \nmock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody)\
-    \ => {\n  assertThat(requestUrl).isEqualTo(expectedValue + '/users/track');\n\
-    \  assertThat(requestOptions).isEqualTo({\n    headers: {\n      Authorization:\
-    \ 'Bearer ' + expectedValue,\n      'Content-Type': 'application/json'\n    },\n\
-    \    method: 'POST'\n  });\n  assertThat(JSON.parse(requestBody)).isEqualTo(expectedRequestBody);\n\
-    \  \n  callback(200);\n});\n\nrunCode(mockData);\n\nassertApi('gtmOnSuccess').wasCalled();\n\
-    assertApi('gtmOnFailure').wasNotCalled();"
+  code: |-
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.includeCommonEventData = true;
+    mockData.eventCustomDataList = eventCustomDataList;
+    mockData.userIdentifiersList = userIdentifiersList;
+    mockData.addUserAlias = true;
+    mockData.updateExistingUsersOnly = true;
+    mockData.userAliasLabel = userAlias.label;
+    mockData.userAliasName = userAlias.name;
+    mockData.userCustomDataList = userCustomDataList;
+    mockData.setAnonymousAliasCookie = true;
+
+    // 'external_id' is present, so 'braze_id' and 'user_alias' must be dropped from the request.
+    const expectedRequestBody = {
+      attributes: [{
+        email: expectedValue,
+        phone: expectedValue,
+        external_id: expectedValue,
+
+        foo: expectedValue,
+        bar: expectedValue
+      }],
+      events: [{
+        app_id: expectedValue,
+
+        email: expectedValue,
+        phone: expectedValue,
+        external_id: expectedValue,
+
+        time: expectedTimestamp,
+
+        properties: {
+          page_location: expectedValue,
+          page_title: expectedValue,
+          page_referrer: expectedValue,
+          page_hostname: expectedValue,
+          page_encoding: expectedValue,
+          screen_resolution: expectedValue,
+          user_agent: expectedValue,
+          language: expectedValue,
+
+          foo: expectedValue,
+          bar: expectedValue
+        }
+      }]
+    };
+
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedValue + '/users/track');
+      assertThat(requestOptions).isEqualTo({
+        headers: {
+          Authorization: 'Bearer ' + expectedValue,
+          'Content-Type': 'application/json'
+        },
+        method: 'POST'
+      });
+      assertThat(JSON.parse(requestBody)).isEqualTo(expectedRequestBody);
+
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
 - name: Custom Event request is sent, but has errors - gtmOnFailure
   code: |-
     mockData.eventType = 'custom';
@@ -1012,36 +1435,82 @@ scenarios:
     assertApi('gtmOnSuccess').wasNotCalled();
     assertApi('gtmOnFailure').wasCalled();
 - name: Purchase Event request is sent successfully - gtmOnSuccess
-  code: "mockData.eventType = 'purchase';\nmockData.includeCommonEventData = true;\n\
-    mockData.eventCustomDataList = eventCustomDataList;\nmockData.purchaseProductId\
-    \ = expectedValue;\nmockData.purchaseTransactionId = expectedValue;\nmockData.purchaseCurrency\
-    \ = expectedValue;\nmockData.purchasePrice = expectedPrice;\nmockData.purchaseProducts\
-    \ = expectedProducts;\nmockData.userIdentifiersList = userIdentifiersList;\nmockData.addUserAlias\
-    \ = true;\nmockData.updateExistingUsersOnly = true;\nmockData.userAliasLabel =\
-    \ userAlias.label;\nmockData.userAliasName = userAlias.name;\nmockData.userCustomDataList\
-    \ = userCustomDataList;\n\nconst expectedRequestBody = {\n  attributes: [{\n \
-    \   email: expectedValue,\n    phone: expectedValue,\n    external_id: expectedValue,\n\
-    \    braze_id: expectedValue,\n    user_alias: {\n      alias_label: expectedValue,\n\
-    \      alias_name: expectedValue\n    },\n    '_update_existing_only': mockData.updateExistingUsersOnly,\n\
-    \    foo: expectedValue,\n    bar: expectedValue\n  }],\n  purchases: [{\n   \
-    \ app_id: expectedValue,\n\n    email: expectedValue,\n    phone: expectedValue,\n\
-    \    external_id: expectedValue,\n    braze_id: expectedValue,\n    user_alias:\
-    \ {\n      alias_label: expectedValue,\n      alias_name: expectedValue\n    },\n\
-    \    '_update_existing_only': mockData.updateExistingUsersOnly,\n    \n    time:\
-    \ expectedTimestamp,\n    product_id: expectedValue,\n    currency: expectedValue,\n\
-    \    price: expectedPrice,\n    \n    properties: {\n      transaction_id: expectedValue,\n\
-    \      products: expectedProducts,\n      \n      page_location: expectedValue,\n\
-    \      page_title: expectedValue,\n      page_referrer: expectedValue,\n     \
-    \ page_hostname: expectedValue,\n      page_encoding: expectedValue,\n      screen_resolution:\
-    \ expectedValue,\n      user_agent: expectedValue,\n      language: expectedValue,\n\
-    \      \n      foo: expectedValue,\n      bar: expectedValue\n    }\n  }]\n};\n\
-    \nmock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody)\
-    \ => {\n  assertThat(requestUrl).isEqualTo(expectedValue + '/users/track');\n\
-    \  assertThat(requestOptions).isEqualTo({\n    headers: {\n      Authorization:\
-    \ 'Bearer ' + expectedValue,\n      'Content-Type': 'application/json'\n    },\n\
-    \    method: 'POST'\n  });\n  assertThat(JSON.parse(requestBody)).isEqualTo(expectedRequestBody);\n\
-    \  \n  callback(200);\n});\n\nrunCode(mockData);\n\nassertApi('gtmOnSuccess').wasCalled();\n\
-    assertApi('gtmOnFailure').wasNotCalled();"
+  code: |-
+    mockData.eventType = 'purchase';
+    mockData.includeCommonEventData = true;
+    mockData.eventCustomDataList = eventCustomDataList;
+    mockData.purchaseProductId = expectedValue;
+    mockData.purchaseTransactionId = expectedValue;
+    mockData.purchaseCurrency = expectedValue;
+    mockData.purchasePrice = expectedPrice;
+    mockData.purchaseProducts = expectedProducts;
+    mockData.userIdentifiersList = userIdentifiersList;
+    mockData.addUserAlias = true;
+    mockData.updateExistingUsersOnly = true;
+    mockData.userAliasLabel = userAlias.label;
+    mockData.userAliasName = userAlias.name;
+    mockData.userCustomDataList = userCustomDataList;
+    mockData.setAnonymousAliasCookie = true;
+
+    // 'external_id' is present, so 'braze_id' and 'user_alias' must be dropped from the request.
+    const expectedRequestBody = {
+      attributes: [{
+        email: expectedValue,
+        phone: expectedValue,
+        external_id: expectedValue,
+
+        foo: expectedValue,
+        bar: expectedValue
+      }],
+      purchases: [{
+        app_id: expectedValue,
+
+        email: expectedValue,
+        phone: expectedValue,
+        external_id: expectedValue,
+
+        time: expectedTimestamp,
+        product_id: expectedValue,
+        currency: expectedValue,
+        price: expectedPrice,
+
+        properties: {
+          transaction_id: expectedValue,
+          products: expectedProducts,
+
+          page_location: expectedValue,
+          page_title: expectedValue,
+          page_referrer: expectedValue,
+          page_hostname: expectedValue,
+          page_encoding: expectedValue,
+          screen_resolution: expectedValue,
+          user_agent: expectedValue,
+          language: expectedValue,
+
+          foo: expectedValue,
+          bar: expectedValue
+        }
+      }]
+    };
+
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedValue + '/users/track');
+      assertThat(requestOptions).isEqualTo({
+        headers: {
+          Authorization: 'Bearer ' + expectedValue,
+          'Content-Type': 'application/json'
+        },
+        method: 'POST'
+      });
+      assertThat(JSON.parse(requestBody)).isEqualTo(expectedRequestBody);
+
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
 - name: Purchase Event request is sent, but has errors - gtmOnFailure
   code: |-
     mockData.eventType = 'purchase';
@@ -1073,6 +1542,227 @@ scenarios:
 
     assertApi('gtmOnSuccess').wasNotCalled();
     assertApi('gtmOnFailure').wasCalled();
+- name: '[Anonymous Alias] Existing __braze_anon_alias cookie is used and re-stored
+    as a user_alias when no manual identifier is set'
+  code: |-
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.setAnonymousAliasCookie = true;
+    mockData.userIdentifiersList = undefined;
+
+    mock('getCookieValues', (name) => (name === '__braze_anon_alias' ? [expectedValue] : []));
+
+    let setCookieName;
+    let setCookieValue;
+    mock('setCookie', (name, value) => {
+      setCookieName = name;
+      setCookieValue = value;
+    });
+
+    let sentAttributes;
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      sentAttributes = JSON.parse(requestBody).attributes[0];
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertThat(sentAttributes.user_alias).isEqualTo({
+      alias_label: 'anonymous_alias_cookie',
+      alias_name: expectedValue
+    });
+    assertThat(sentAttributes['_update_existing_only']).isEqualTo(false);
+    assertThat(setCookieName).isEqualTo('__braze_anon_alias');
+    assertThat(setCookieValue).isEqualTo(expectedValue);
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
+- name: '[Anonymous Alias] A new anonymous user_alias is generated and stored as a
+    cookie when none is found'
+  code: |-
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.setAnonymousAliasCookie = true;
+    mockData.userIdentifiersList = undefined;
+
+    mock('getCookieValues', () => []);
+
+    let setCookieValue;
+    mock('setCookie', (name, value) => {
+      if (name === '__braze_anon_alias') setCookieValue = value;
+    });
+
+    let sentAttributes;
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      sentAttributes = JSON.parse(requestBody).attributes[0];
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertThat(sentAttributes.user_alias.alias_label).isEqualTo('anonymous_alias_cookie');
+    assertThat(sentAttributes.user_alias.alias_name).isNotEmpty();
+    assertThat(sentAttributes.user_alias.alias_name).isEqualTo(setCookieValue);
+    assertThat(sentAttributes['_update_existing_only']).isEqualTo(false);
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
+- name: '[Anonymous Alias] Nothing is generated or stored when setAnonymousAliasCookie
+    is false'
+  code: |-
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.setAnonymousAliasCookie = false;
+    mockData.userIdentifiersList = undefined;
+
+    mock('getCookieValues', () => []);
+
+    mock('setCookie', (name) => {
+      if (name === '__braze_anon_alias') fail('__braze_anon_alias cookie should not have been set');
+    });
+
+    runCode(mockData);
+
+    assertApi('sendHttpRequest').wasNotCalled();
+    assertApi('gtmOnFailure').wasCalled();
+    assertApi('gtmOnSuccess').wasNotCalled();
+- name: '[Anonymous Alias] Only one primary identifier is sent, following external_id
+    > braze_id > user_alias precedence'
+  code: |-
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.setAnonymousAliasCookie = true;
+    mockData.addUserAlias = true;
+    mockData.updateExistingUsersOnly = true;
+    mockData.userAliasLabel = userAlias.label;
+    mockData.userAliasName = userAlias.name;
+
+    let sentAttributes;
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      sentAttributes = JSON.parse(requestBody).attributes[0];
+      callback(200);
+    });
+
+    // external_id + braze_id + user_alias -> only external_id is kept.
+    mockData.userIdentifiersList = [
+      { name: 'external_id', value: expectedValue },
+      { name: 'braze_id', value: expectedValue }
+    ];
+    runCode(mockData);
+    assertThat(sentAttributes.external_id).isEqualTo(expectedValue);
+    assertThat(sentAttributes.braze_id).isUndefined();
+    assertThat(sentAttributes.user_alias).isUndefined();
+    assertThat(sentAttributes['_update_existing_only']).isUndefined();
+
+    // braze_id + user_alias, no external_id -> only braze_id is kept.
+    mockData.userIdentifiersList = [{ name: 'braze_id', value: expectedValue }];
+    runCode(mockData);
+    assertThat(sentAttributes.braze_id).isEqualTo(expectedValue);
+    assertThat(sentAttributes.user_alias).isUndefined();
+    assertThat(sentAttributes['_update_existing_only']).isUndefined();
+
+    // no external_id, no manual braze_id -> the manually configured user_alias is kept
+    // (it takes precedence over the automatic anonymous alias fallback).
+    mockData.userIdentifiersList = undefined;
+    mock('getCookieValues', () => []);
+    mockData.setAnonymousAliasCookie = false;
+    runCode(mockData);
+    assertThat(sentAttributes.braze_id).isUndefined();
+    assertThat(sentAttributes.user_alias).isEqualTo({
+      alias_label: expectedValue,
+      alias_name: expectedValue
+    });
+    assertThat(sentAttributes['_update_existing_only']).isEqualTo(true);
+- name: '[Track Event] Does not automatically call /users/identify even when external_id
+    and an existing anonymous alias are both present'
+  code: |-
+    mockData.action = 'trackEvent';
+    mockData.eventType = 'custom';
+    mockData.eventName = expectedValue;
+    mockData.setAnonymousAliasCookie = true;
+    mockData.userIdentifiersList = [{ name: 'external_id', value: expectedValue }];
+
+    mock('getCookieValues', (name) => (name === '__braze_anon_alias' ? [expectedValue] : []));
+
+    const sentRequests = [];
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      sentRequests.push(requestUrl);
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertThat(sentRequests.filter((url) => url.indexOf('/users/identify') !== -1).length).isEqualTo(0);
+    assertThat(sentRequests.filter((url) => url.indexOf('/users/track') !== -1).length).isEqualTo(1);
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
+- name: '[Identify User] Merges the anonymous alias into external_id via /users/identify
+    when both are present'
+  code: |-
+    mockData.action = 'identifyUser';
+    mockData.setAnonymousAliasCookie = true;
+    mockData.userIdentifiersList = [{ name: 'external_id', value: expectedValue }];
+
+    mock('getCookieValues', (name) => (name === '__braze_anon_alias' ? [expectedValue] : []));
+
+    let setCookieValue;
+    mock('setCookie', (name, value) => {
+      if (name === '__braze_anon_alias') setCookieValue = value;
+    });
+
+    mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
+      assertThat(requestUrl).isEqualTo(expectedValue + '/users/identify');
+      assertThat(requestOptions).isEqualTo({
+        headers: {
+          Authorization: 'Bearer ' + expectedValue,
+          'Content-Type': 'application/json'
+        },
+        method: 'POST'
+      });
+      assertThat(JSON.parse(requestBody)).isEqualTo({
+        aliases_to_identify: [
+          {
+            external_id: expectedValue,
+            user_alias: {
+              alias_label: 'anonymous_alias_cookie',
+              alias_name: expectedValue
+            }
+          }
+        ]
+      });
+
+      callback(200);
+    });
+
+    runCode(mockData);
+
+    assertThat(setCookieValue).isEqualTo(expectedValue);
+    assertApi('gtmOnSuccess').wasCalled();
+    assertApi('gtmOnFailure').wasNotCalled();
+- name: '[Identify User] Fails without calling /users/identify when external_id is
+    missing'
+  code: |-
+    mockData.action = 'identifyUser';
+    mockData.userIdentifiersList = undefined;
+
+    mock('getCookieValues', (name) => (name === '__braze_anon_alias' ? [expectedValue] : []));
+
+    runCode(mockData);
+
+    assertApi('sendHttpRequest').wasNotCalled();
+    assertApi('gtmOnFailure').wasCalled();
+    assertApi('gtmOnSuccess').wasNotCalled();
+- name: '[Identify User] Fails without calling /users/identify when there is no existing
+    anonymous alias to merge'
+  code: |-
+    mockData.action = 'identifyUser';
+    mockData.userIdentifiersList = [{ name: 'external_id', value: expectedValue }];
+
+    mock('getCookieValues', () => []);
+
+    runCode(mockData);
+
+    assertApi('sendHttpRequest').wasNotCalled();
+    assertApi('gtmOnFailure').wasCalled();
+    assertApi('gtmOnSuccess').wasNotCalled();
 setup: |-
   const JSON = require('JSON');
   const Promise = require('Promise');
@@ -1155,6 +1845,10 @@ setup: |-
   mock('getTimestampMillis', 1744912049020);
   const expectedTimestamp = '2025-04-17T17:47:29.020Z';
 
+  mock('getCookieValues', () => []);
+  mock('setCookie', () => {});
+  mock('generateRandom', (min, max) => min + (max - min) / 2);
+
   mock('sendHttpRequest', (requestUrl, callback, requestOptions, requestBody) => {
     callback(200);
   });
@@ -1173,10 +1867,15 @@ setup: |-
 
 ___NOTES___
 
+2026-08-14 - Change Notes:
+  - Add anonymous alias support: when no user identifier is available, an anonymous `user_alias` is sent instead, sourced from a server-set `__braze_anon_alias` cookie or the `braze_id` Event Data parameter, generating a new one if none is found; new "Set Anonymous Alias cookie" checkbox (default enabled) controls generation/storage and exposes cookie domain/expiration/SameSite/HttpOnly settings. Named "Anonymous Alias" (not "Braze ID") since it's a `user_alias`, not the real `braze_id`/device ID set by the client SDK
+  - Add a top-level "Action" field (`Track Event` / `Identify User`, default `Track Event`); "Identify User" explicitly merges an existing anonymous alias into an `external_id` profile via Braze's `/users/identify` endpoint (`braze_id` was avoided as the anonymous identifier because `/users/identify` does not accept it, only alias/email/phone-only profiles can be merged), reusing the same "User Identifiers" fields for `external_id` and failing the tag (`gtmOnFailure`) if either `external_id` or an existing alias is missing
+  - Enforce Braze's single-primary-identifier rule per request object: `external_id` takes precedence over a manually set `braze_id`, which takes precedence over `user_alias`; `email`/`phone` are always kept as secondary attributes
+  - Add `get_cookies`/`set_cookies` permissions scoped to `__braze_anon_alias`; the API key now also requires the `users.identify` permission for the "Identify User" action
+  - Update README and field help text to document the anonymous alias feature and the new Action field
 
 2026-05-25 Change Notes:
  - Logging removal.
-
 
 Created on 10/15/2025, 5:37:17 PM
 
