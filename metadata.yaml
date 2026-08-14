@@ -1,6 +1,8 @@
 homepage: 'https://stape.io/'
 documentation: 'https://github.com/stape-io/braze-server-tag'
 versions:
+  - sha: 0421f548fe0ab695687f7bc3487d7972f99120fd
+    changeNotes: Add anonymous alias tracking and Identify User action.
   - sha: 6b4ac04f37ab738c4a8fb998193d08ec3fdabd77
     changeNotes: Logging removal.
   - sha: b39da32b3644b4c851440da586c74ac55375033c
